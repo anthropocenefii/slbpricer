@@ -9,18 +9,29 @@ import type { YieldCurveEntry } from './components/YieldCurvePanel'
 import { priceBond } from './api/pricer'
 import type { BondPriceResponse, CallOption, StepUp } from './types/bond'
 
+function toISODate(d: Date): string {
+  return d.toISOString().slice(0, 10)
+}
+
+const _today = new Date()
+_today.setHours(0, 0, 0, 0)
+const _maturity = new Date(_today)
+_maturity.setFullYear(_maturity.getFullYear() + 5)
+const _callDefault = new Date(_today)
+_callDefault.setFullYear(_callDefault.getFullYear() + 2)
+
 const DEFAULT_BOND: BondBasicInputs = {
-  settlement_date: '2024-01-01',
-  maturity_date: '2029-01-01',
+  settlement_date: toISODate(_today),
+  maturity_date: toISODate(_maturity),
   face_value: 100,
   coupon_rate: 5,
-  coupon_frequency: 2,
+  coupon_frequency: 1,
   day_count: 'ACT/ACT',
   yield_rate: 5,
 }
 
 const DEFAULT_CALL: CallOption = {
-  call_date: '2027-01-01',
+  call_date: toISODate(_callDefault),
   call_price: 100,
 }
 

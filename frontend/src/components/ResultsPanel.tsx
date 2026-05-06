@@ -1,6 +1,7 @@
 import {
   ComposedChart,
   Bar,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -87,13 +88,16 @@ export function ResultsPanel({ result, zSpreadBps }: Props) {
   const hasCurve = result.cashflow_schedule.some(cf => cf.curve_rate != null)
   const hasScenarios = result.scenario_results.length > 0
   const scenarioHasSpread = hasScenarios && result.scenario_results[0].spread_value_bps != null
+  const scenarioHasYieldBps = hasScenarios && result.scenario_results[0].yield_value_bps != null
   const stepUpValuePrice = result.expected_clean_price - result.base_clean_price
+  const hasPrincipalPct = result.has_principal_pct_steps === true
 
   const chartData = result.cashflow_schedule.map(cf => ({
     date: cf.date.slice(0, 7),
     'Base coupon': parseFloat(cf.base_coupon.toFixed(4)),
     'Exp. coupon': parseFloat(cf.expected_coupon.toFixed(4)),
     'Principal': cf.principal > 0 ? parseFloat(cf.principal.toFixed(4)) : null,
+    ...(hasPrincipalPct && { 'Outstanding': parseFloat(cf.outstanding_principal.toFixed(2)) }),
   }))
 
   return (
@@ -115,7 +119,11 @@ export function ResultsPanel({ result, zSpreadBps }: Props) {
         <DeltaCard
           label="Step-up Value"
           value={stepUpValuePrice}
-          subtitle="Expected − Base (clean)"
+          subtitle={
+            result.step_up_yield_bps != null
+              ? `Expected − Base (clean) · ${result.step_up_yield_bps >= 0 ? '+' : ''}${result.step_up_yield_bps.toFixed(1)} bps`
+              : 'Expected − Base (clean)'
+          }
         />
       </div>
 
@@ -193,8 +201,11 @@ export function ResultsPanel({ result, zSpreadBps }: Props) {
                   <th className="px-4 py-2 text-right">Base Clean</th>
                   <th className="px-4 py-2 text-right">Expected Clean</th>
                   <th className="px-4 py-2 text-right">Step-up Value (Price)</th>
-                  {scenarioHasSpread && (
+                  {scenarioHasYieldBps && (
                     <th className="px-4 py-2 text-right">Step-up Value (bps)</th>
+                  )}
+                  {scenarioHasSpread && (
+                    <th className="px-4 py-2 text-right">Step-up Value (Z-bps)</th>
                   )}
                 </tr>
               </thead>
@@ -220,6 +231,17 @@ export function ResultsPanel({ result, zSpreadBps }: Props) {
                     >
                       {sr.pv_of_stepup >= 0 ? '+' : ''}{fmt(sr.pv_of_stepup)}
                     </td>
+                    {scenarioHasYieldBps && (
+                      <td
+                        className={`px-4 py-2 text-right font-mono font-semibold ${
+                          (sr.yield_value_bps ?? 0) >= 0 ? 'text-green-600' : 'text-red-500'
+                        }`}
+                      >
+                        {sr.yield_value_bps != null
+                          ? `${sr.yield_value_bps >= 0 ? '+' : ''}${sr.yield_value_bps.toFixed(1)} bps`
+                          : '—'}
+                      </td>
+                    )}
                     {scenarioHasSpread && (
                       <td
                         className={`px-4 py-2 text-right font-mono font-semibold ${
@@ -227,7 +249,7 @@ export function ResultsPanel({ result, zSpreadBps }: Props) {
                         }`}
                       >
                         {sr.spread_value_bps != null
-                          ? `${sr.spread_value_bps >= 0 ? '+' : ''}${sr.spread_value_bps.toFixed(1)}`
+                          ? `${sr.spread_value_bps >= 0 ? '+' : ''}${sr.spread_value_bps.toFixed(1)} bps`
                           : '—'}
                       </td>
                     )}
@@ -241,7 +263,14 @@ export function ResultsPanel({ result, zSpreadBps }: Props) {
 
       {/* Cash flow chart */}
       <div className="rounded-lg bg-white border border-gray-200 p-4">
-        <h3 className="text-sm font-semibold text-gray-700 mb-4">Cash Flows by Date</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold text-gray-700">Cash Flows by Date</h3>
+          {hasPrincipalPct && (
+            <span className="text-xs text-orange-600 bg-orange-50 border border-orange-200 rounded px-2 py-0.5">
+              Dashed line = outstanding principal (step-up basis)
+            </span>
+          )}
+        </div>
         <ResponsiveContainer width="100%" height={240}>
           <ComposedChart data={chartData} margin={{ top: 4, right: 50, left: 0, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -253,6 +282,18 @@ export function ResultsPanel({ result, zSpreadBps }: Props) {
             <Bar yAxisId="coupon" dataKey="Base coupon" fill="#a5b4fc" />
             <Bar yAxisId="coupon" dataKey="Exp. coupon" fill="#6366f1" />
             <Bar yAxisId="principal" dataKey="Principal" fill="#fbbf24" />
+            {hasPrincipalPct && (
+              <Line
+                yAxisId="principal"
+                type="monotone"
+                dataKey="Outstanding"
+                stroke="#f97316"
+                strokeWidth={2}
+                strokeDasharray="6 3"
+                dot={false}
+                name="Outstanding principal"
+              />
+            )}
           </ComposedChart>
         </ResponsiveContainer>
       </div>
@@ -269,7 +310,10 @@ export function ResultsPanel({ result, zSpreadBps }: Props) {
                 <th className="px-3 py-2 text-left">Date</th>
                 <th className="px-3 py-2 text-right">Base Coupon</th>
                 <th className="px-3 py-2 text-right">Exp. Coupon</th>
-                <th className="px-3 py-2 text-right">Principal</th>
+                <th className="px-3 py-2 text-right">Redemption</th>
+                {hasPrincipalPct && (
+                  <th className="px-3 py-2 text-right text-orange-600">Outstanding</th>
+                )}
                 {hasCurve && <th className="px-3 py-2 text-right text-emerald-600">RF Rate (%)</th>}
                 <th className="px-3 py-2 text-right">Disc. Factor</th>
                 <th className="px-3 py-2 text-right">Base Coupon PV</th>
@@ -283,7 +327,12 @@ export function ResultsPanel({ result, zSpreadBps }: Props) {
                   <td className="px-3 py-1.5 text-gray-700">{cf.date}</td>
                   <td className="px-3 py-1.5 text-right">{cf.base_coupon.toFixed(4)}</td>
                   <td className="px-3 py-1.5 text-right">{cf.expected_coupon.toFixed(4)}</td>
-                  <td className="px-3 py-1.5 text-right">{cf.principal.toFixed(2)}</td>
+                  <td className="px-3 py-1.5 text-right">{cf.principal > 0 ? cf.principal.toFixed(2) : '—'}</td>
+                  {hasPrincipalPct && (
+                    <td className="px-3 py-1.5 text-right text-orange-600 font-semibold">
+                      {cf.outstanding_principal.toFixed(2)}
+                    </td>
+                  )}
                   {hasCurve && (
                     <td className="px-3 py-1.5 text-right text-emerald-600">
                       {cf.curve_rate != null ? (cf.curve_rate * 100).toFixed(3) : '—'}

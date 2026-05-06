@@ -44,34 +44,65 @@ def build_schedule(
     Build the full cash flow schedule for each coupon date after settlement.
 
     Each entry:
-      date            – coupon payment date
-      base_coupon     – periodic coupon with no step-up (face * rate / freq)
-      expected_coupon – base + Σ(delta_i * prob_i) for each applicable step-up
-      principal       – face_value on maturity date, 0 otherwise
-      step_up_deltas  – list of (periodic_delta_amount, probability) tuples
+      date                 – coupon payment date
+      base_coupon          – periodic coupon with no step-up (face * rate / freq)
+      expected_coupon      – base + probability-weighted coupon deltas
+      principal            – base redemption: face_value at maturity, 0 otherwise
+      expected_principal   – probability-weighted redemption (includes principal_pct step-ups)
+      outstanding_principal– expected face value outstanding at this date (for display)
+      step_up_deltas       – list of (periodic_coupon_delta, probability) tuples
+
+    Step type semantics
+    -------------------
+    coupon_delta  : coupon rate changes by `coupon_delta` p.a.
+                    periodic_coupon_delta = face_value * coupon_delta / frequency
+    principal_pct : face value changes by `coupon_delta` fraction from start_date.
+                    new_face = face_value * (1 + coupon_delta)
+                    periodic_coupon_delta = base_coupon * coupon_delta
+                    redemption_delta      = face_value * coupon_delta (at maturity only)
     """
     all_dates = _generate_coupon_dates(settlement, maturity, frequency)
     future_dates = [d for d in all_dates if d > settlement]
 
-    periodic_coupon = face_value * coupon_rate / frequency
+    base_coupon = face_value * coupon_rate / frequency
 
     schedule: list[dict] = []
     for d in future_dates:
-        deltas: list[tuple[float, float]] = []
+        coupon_deltas: list[tuple[float, float]] = []   # (delta_amount, probability)
+        principal_deltas: list[tuple[float, float]] = []  # (delta_amount, prob) at maturity only
+
         for su in step_ups:
             if su.start_date <= d <= su.end_date:
-                periodic_delta = face_value * su.coupon_delta / frequency
-                deltas.append((periodic_delta, su.probability))
+                if su.step_type == "principal_pct":
+                    # Coupon proportionally increases with face value
+                    coupon_deltas.append((base_coupon * su.coupon_delta, su.probability))
+                    # Redemption increases at maturity
+                    if d == maturity:
+                        principal_deltas.append((face_value * su.coupon_delta, su.probability))
+                else:
+                    coupon_deltas.append((face_value * su.coupon_delta / frequency, su.probability))
 
-        expected_extra = sum(delta * prob for delta, prob in deltas)
+        expected_extra_coupon = sum(delta * prob for delta, prob in coupon_deltas)
+        expected_extra_principal = sum(delta * prob for delta, prob in principal_deltas)
+
+        base_principal = face_value if d == maturity else 0.0
+
+        # Expected outstanding = face + weighted face-value changes from active principal_pct steps
+        outstanding_delta = sum(
+            face_value * su.coupon_delta * su.probability
+            for su in step_ups
+            if su.step_type == "principal_pct" and su.start_date <= d <= su.end_date
+        )
 
         schedule.append(
             {
                 "date": d,
-                "base_coupon": periodic_coupon,
-                "expected_coupon": periodic_coupon + expected_extra,
-                "principal": face_value if d == maturity else 0.0,
-                "step_up_deltas": deltas,
+                "base_coupon": base_coupon,
+                "expected_coupon": base_coupon + expected_extra_coupon,
+                "principal": base_principal,
+                "expected_principal": base_principal + expected_extra_principal,
+                "outstanding_principal": face_value + outstanding_delta,
+                "step_up_deltas": coupon_deltas,
             }
         )
 
@@ -95,6 +126,11 @@ def build_call_schedule(
     # Replace principal on the last entry with call_price
     if full:
         last = full[-1]
-        full[-1] = {**last, "principal": call_price, "expected_coupon": last["base_coupon"]}
+        full[-1] = {
+            **last,
+            "principal": call_price,
+            "expected_principal": call_price,
+            "expected_coupon": last["base_coupon"],
+        }
 
     return full

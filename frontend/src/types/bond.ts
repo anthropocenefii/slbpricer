@@ -1,11 +1,13 @@
 export type DayCount = 'ACT/ACT' | 'ACT/360' | 'ACT/365' | '30/360'
 export type Frequency = 1 | 2 | 4 | 12
+export type StepType = 'coupon_delta' | 'principal_pct'
 
 export interface StepUp {
   start_date: string   // ISO 8601 YYYY-MM-DD
   end_date: string
-  coupon_delta: number // annual decimal, e.g. 0.005 = +50 bps
+  coupon_delta: number // annual decimal; meaning depends on step_type
   probability: number  // 0–1
+  step_type: StepType  // 'coupon_delta' = bps change to coupon rate; 'principal_pct' = % of outstanding principal
 }
 
 export interface CallOption {
@@ -43,6 +45,7 @@ export interface ScenarioResult {
   pv_of_stepup: number
   certain_clean_price?: number
   spread_value_bps?: number
+  yield_value_bps?: number
 }
 
 export interface CashFlowEntry {
@@ -50,6 +53,7 @@ export interface CashFlowEntry {
   base_coupon: number
   expected_coupon: number
   principal: number
+  outstanding_principal: number
   discount_factor: number
   base_coupon_pv: number
   expected_coupon_pv: number
@@ -65,7 +69,9 @@ export interface BondPriceResponse {
   accrued_interest: number
   scenario_results: ScenarioResult[]
   cashflow_schedule: CashFlowEntry[]
+  has_principal_pct_steps?: boolean
   price_to_call: number | null
   clean_price_to_call: number | null
   step_up_spread_bps?: number
+  step_up_yield_bps?: number
 }

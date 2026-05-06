@@ -69,7 +69,9 @@ def price_with_spread(
     for cf in schedule:
         df = curve_discount_factor(settlement, cf["date"], spread, curve, frequency, dc)
         coupon = cf["expected_coupon"] if use_expected else cf["base_coupon"]
-        total += (coupon + cf["principal"]) * df
+        # Use expected_principal (includes principal_pct step-up effects) when pricing expected
+        principal = cf.get("expected_principal", cf["principal"]) if use_expected else cf["principal"]
+        total += (coupon + principal) * df
     return total
 
 
@@ -83,12 +85,16 @@ def price_scenario_with_spread(
     curve: list[tuple[float, float]],
     frequency: int,
     dc: DayCount,
+    principal_delta: float = 0.0,
 ) -> float:
     total = 0.0
     for cf in schedule:
         df = curve_discount_factor(settlement, cf["date"], spread, curve, frequency, dc)
-        coupon = cf["base_coupon"] + (periodic_delta if su_start <= cf["date"] <= su_end else 0)
-        total += (coupon + cf["principal"]) * df
+        in_step = su_start <= cf["date"] <= su_end
+        coupon = cf["base_coupon"] + (periodic_delta if in_step else 0)
+        # principal_delta applies at the maturity date (where base principal > 0)
+        principal = cf["principal"] + (principal_delta if (in_step and cf["principal"] > 0) else 0)
+        total += (coupon + principal) * df
     return total
 
 

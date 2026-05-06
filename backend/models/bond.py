@@ -1,13 +1,17 @@
 from datetime import date
-from typing import Optional
+from typing import Literal, Optional
 from pydantic import BaseModel, field_validator
 
 
 class StepUp(BaseModel):
     start_date: date
     end_date: date
-    coupon_delta: float        # annual delta as decimal, e.g. 0.005 = +50 bps; negative = step-down
+    coupon_delta: float        # annual rate as decimal; interpretation depends on step_type
     probability: float = 0.5  # 0.0 – 1.0
+    step_type: Literal["coupon_delta", "principal_pct"] = "coupon_delta"
+    # "coupon_delta"  – change to coupon rate: periodic_cf = face_value * coupon_delta / freq
+    # "principal_pct" – % of outstanding principal: periodic_cf = outstanding * coupon_delta / freq
+    #                   (numerically identical for bullet bonds; differs once amortization is added)
 
     @field_validator("probability")
     @classmethod
@@ -57,6 +61,7 @@ class ScenarioResult(BaseModel):
     pv_of_stepup: float
     certain_clean_price: Optional[float] = None  # clean price if this scenario occurs with certainty
     spread_value_bps: Optional[float] = None  # bps the step-up is worth at the input z-spread
+    yield_value_bps: Optional[float] = None   # bps the step-up is worth in flat-yield terms
 
 
 class CashFlowEntry(BaseModel):
@@ -64,6 +69,7 @@ class CashFlowEntry(BaseModel):
     base_coupon: float
     expected_coupon: float
     principal: float
+    outstanding_principal: float  # notional balance on which principal_pct step-ups are calculated
     discount_factor: float
     base_coupon_pv: float
     expected_coupon_pv: float
@@ -79,6 +85,8 @@ class BondPriceResponse(BaseModel):
     accrued_interest: float
     scenario_results: list[ScenarioResult]
     cashflow_schedule: list[CashFlowEntry]
+    has_principal_pct_steps: bool = False  # true when any step-up uses principal_pct type
     price_to_call: Optional[float] = None
     clean_price_to_call: Optional[float] = None
     step_up_spread_bps: Optional[float] = None  # bps all step-ups combined are worth at input z-spread
+    step_up_yield_bps: Optional[float] = None   # bps all step-ups combined are worth in flat-yield terms

@@ -1,4 +1,4 @@
-import type { StepUp } from '../types/bond'
+import type { StepUp, StepType } from '../types/bond'
 
 interface Props {
   stepUps: StepUp[]
@@ -21,6 +21,7 @@ function empty(settlement: string, maturity: string): StepUp {
     end_date: maturity,
     coupon_delta: 0.0025,
     probability: 0.5,
+    step_type: 'coupon_delta',
   }
 }
 
@@ -51,6 +52,9 @@ export function StepUpConfigurator({ stepUps, onChange, settlementDate, maturity
           <div className="flex items-center justify-between">
             <span className="text-sm font-semibold text-indigo-700">
               Step {i + 1} — {su.coupon_delta >= 0 ? '▲ Step-up' : '▼ Step-down'}
+              {su.step_type === 'principal_pct' && (
+                <span className="ml-1 text-indigo-400 font-normal text-xs">(% of principal)</span>
+              )}
             </span>
             <button
               type="button"
@@ -59,6 +63,28 @@ export function StepUpConfigurator({ stepUps, onChange, settlementDate, maturity
             >
               Remove
             </button>
+          </div>
+
+          {/* Step type toggle */}
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              Step-up Type
+            </span>
+            <div className="flex gap-4">
+              {(['coupon_delta', 'principal_pct'] as StepType[]).map(type => (
+                <label key={type} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                  <input
+                    type="radio"
+                    name={`step_type_${i}`}
+                    value={type}
+                    checked={su.step_type === type}
+                    onChange={() => update(i, 'step_type', type)}
+                    className="accent-indigo-600"
+                  />
+                  {type === 'coupon_delta' ? 'Coupon rate change' : '% of principal outstanding'}
+                </label>
+              ))}
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -93,7 +119,7 @@ export function StepUpConfigurator({ stepUps, onChange, settlementDate, maturity
 
           <div className="flex flex-col gap-1">
             <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-              Coupon Change (bps p.a.)
+              {su.step_type === 'principal_pct' ? 'Principal % Change (bps p.a.)' : 'Coupon Change (bps p.a.)'}
               <span className="ml-2 text-indigo-600 font-bold">
                 {(su.coupon_delta * 10000).toFixed(0)} bps
                 {' '}({su.coupon_delta >= 0 ? '+' : ''}{(su.coupon_delta * 100).toFixed(3)}%)
@@ -110,7 +136,9 @@ export function StepUpConfigurator({ stepUps, onChange, settlementDate, maturity
               placeholder="e.g. 50 for +50 bps, -25 for step-down"
             />
             <p className="text-xs text-gray-400">
-              Positive = step-up, negative = step-down. Applies to coupons between the dates above.
+              {su.step_type === 'principal_pct'
+                ? 'Positive = step-up, negative = step-down. Extra cash flow = outstanding principal × rate / frequency per period.'
+                : 'Positive = step-up, negative = step-down. Applies to coupons between the dates above.'}
             </p>
           </div>
 

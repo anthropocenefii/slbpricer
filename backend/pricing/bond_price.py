@@ -2,6 +2,8 @@
 
 from datetime import date
 
+from scipy.optimize import brentq
+
 from ..models.bond import BondPriceRequest, CashFlowEntry, ScenarioResult, StepUp
 from .cashflows import build_schedule, build_call_schedule, get_prev_next_coupon
 from .day_count import DayCount, accrued_fraction, year_fraction
@@ -30,7 +32,8 @@ def _pv_flat(
     for cf in schedule:
         df = _flat_df(settlement, cf["date"], yield_rate, frequency, dc)
         coupon = cf["expected_coupon"] if use_expected else cf["base_coupon"]
-        total += (coupon + cf["principal"]) * df
+        principal = cf.get("expected_principal", cf["principal"]) if use_expected else cf["principal"]
+        total += (coupon + principal) * df
     return total
 
 
@@ -43,13 +46,34 @@ def _scenario_price_flat(
     yield_rate: float,
     dc: DayCount,
 ) -> float:
-    periodic_delta = face_value * su.coupon_delta / frequency
     total = 0.0
     for cf in schedule:
         df = _flat_df(settlement, cf["date"], yield_rate, frequency, dc)
-        coupon = cf["base_coupon"] + (periodic_delta if su.start_date <= cf["date"] <= su.end_date else 0)
-        total += (coupon + cf["principal"]) * df
+        in_step = su.start_date <= cf["date"] <= su.end_date
+        if su.step_type == "principal_pct":
+            # Coupon scales with the new face value: new_coupon = base_coupon * (1 + coupon_delta)
+            coupon = cf["base_coupon"] * (1 + su.coupon_delta) if in_step else cf["base_coupon"]
+            # Redemption at maturity also scales
+            principal = cf["principal"] * (1 + su.coupon_delta) if (in_step and cf["principal"] > 0) else cf["principal"]
+        else:
+            periodic_delta = face_value * su.coupon_delta / frequency
+            coupon = cf["base_coupon"] + (periodic_delta if in_step else 0)
+            principal = cf["principal"]
+        total += (coupon + principal) * df
     return total
+
+
+def _solve_yield_flat(
+    target: float,
+    settlement: date,
+    schedule: list[dict],
+    frequency: int,
+    dc: DayCount,
+) -> float:
+    """Find the flat yield on the BASE cash flows that prices to `target`."""
+    def f(y: float) -> float:
+        return _pv_flat(settlement, schedule, y, frequency, dc, use_expected=False) - target
+    return brentq(f, -0.5, 5.0, xtol=1e-9)
 
 
 def _compute_accrued(
@@ -123,10 +147,18 @@ def price_bond(req: BondPriceRequest) -> dict:
     scenario_rows: list[dict] = []
     for i, su in enumerate(req.step_ups):
         if use_curve:
-            periodic_delta = req.face_value * su.coupon_delta / freq
+            if su.step_type == "principal_pct":
+                # Coupon delta: base_coupon * coupon_delta per period in range
+                periodic_delta = req.face_value * req.coupon_rate / freq * su.coupon_delta
+                # Redemption delta: face_value * coupon_delta at maturity
+                principal_delta = req.face_value * su.coupon_delta
+            else:
+                periodic_delta = req.face_value * su.coupon_delta / freq
+                principal_delta = 0.0
             sp_certain = price_scenario_with_spread(
                 schedule, su.start_date, su.end_date, periodic_delta,
                 req.settlement_date, z_input, curve, freq, dc,
+                principal_delta=principal_delta,
             )
         else:
             sp_certain = _scenario_price_flat(
@@ -136,11 +168,24 @@ def price_bond(req: BondPriceRequest) -> dict:
 
         pv_of_stepup = (sp_certain - base_dirty) * su.probability
         sp_weighted = base_dirty + pv_of_stepup
+        direction = 'up' if su.coupon_delta >= 0 else 'down'
+        if su.step_type == "principal_pct":
+            new_face = req.face_value * (1 + su.coupon_delta)
+            type_label = f"principal {req.face_value:.2f}→{new_face:.4f} ({su.coupon_delta * 10000:+.0f}bps)"
+        else:
+            type_label = f"{su.coupon_delta * 100:+.3f}% p.a."
         label = (
-            f"Step-{'up' if su.coupon_delta >= 0 else 'down'} {i + 1}: "
-            f"{su.coupon_delta * 100:+.3f}% p.a. "
+            f"Step-{direction} {i + 1}: {type_label} "
             f"({su.start_date} – {su.end_date})"
         )
+        yield_value_bps = None
+        if not use_curve:
+            try:
+                y_base = _solve_yield_flat(sp_certain, req.settlement_date, schedule, freq, dc)
+                yield_value_bps = round((req.yield_rate - y_base) * 10000, 2)
+            except Exception:
+                pass
+
         scenario_rows.append({
             "su": su,
             "sp_certain": sp_certain,
@@ -153,10 +198,22 @@ def price_bond(req: BondPriceRequest) -> dict:
                 clean_price=round(sp_weighted - accrued, 6),
                 pv_of_stepup=round(pv_of_stepup, 6),
                 certain_clean_price=round(sp_certain - accrued, 6),
+                yield_value_bps=yield_value_bps,
             ),
         })
 
     scenario_results = [row["result"] for row in scenario_rows]
+
+    # ── Yield-bps value of step-up features (basic / flat-yield mode) ────────
+    step_up_yield_bps = None
+    if not use_curve and req.step_ups:
+        try:
+            y_base_for_expected = _solve_yield_flat(
+                expected_dirty, req.settlement_date, schedule, freq, dc
+            )
+            step_up_yield_bps = round((req.yield_rate - y_base_for_expected) * 10000, 2)
+        except Exception:
+            pass
 
     # ── Spread value of step-up features (advanced mode only) ─────────────────
     #
@@ -195,16 +252,18 @@ def price_bond(req: BondPriceRequest) -> dict:
         else:
             df = _flat_df(req.settlement_date, cf["date"], req.yield_rate, freq, dc)
 
+        exp_principal = cf.get("expected_principal", cf["principal"])
         cashflow_entries.append(
             CashFlowEntry(
                 date=cf["date"],
                 base_coupon=round(cf["base_coupon"], 6),
                 expected_coupon=round(cf["expected_coupon"], 6),
-                principal=round(cf["principal"], 6),
+                principal=round(exp_principal, 6),
+                outstanding_principal=round(cf.get("outstanding_principal", req.face_value), 6),
                 discount_factor=round(df, 6),
                 base_coupon_pv=round(cf["base_coupon"] * df, 6),
                 expected_coupon_pv=round(cf["expected_coupon"] * df, 6),
-                principal_pv=round(cf["principal"] * df, 6),
+                principal_pv=round(exp_principal * df, 6),
                 curve_rate=round(curve_rate_map[cf["date"]], 6) if cf["date"] in curve_rate_map else None,
             )
         )
@@ -236,7 +295,9 @@ def price_bond(req: BondPriceRequest) -> dict:
         accrued_interest=round(accrued, 6),
         scenario_results=scenario_results,
         cashflow_schedule=cashflow_entries,
+        has_principal_pct_steps=any(su.step_type == "principal_pct" for su in req.step_ups),
         price_to_call=price_to_call,
         clean_price_to_call=clean_price_to_call,
         step_up_spread_bps=step_up_spread_bps,
+        step_up_yield_bps=step_up_yield_bps,
     )
