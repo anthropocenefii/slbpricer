@@ -6,16 +6,19 @@ RUN npm ci
 COPY frontend/ ./
 RUN npm run build
 
-# Stage 2: Python runtime + static files
+# Stage 2: Python / Django runtime + static files
 FROM python:3.11-slim
 WORKDIR /app
 
-COPY backend/requirements.txt ./
+COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY backend/ ./backend/
-COPY --from=ui-build /app/frontend/dist ./static/
+COPY manage.py ./
+COPY slbpricer_project/ ./slbpricer_project/
+COPY pricer/ ./pricer/
+COPY --from=ui-build /app/static ./static/
 
 ENV PYTHONPATH=/app
+ENV DJANGO_SETTINGS_MODULE=slbpricer_project.settings
 EXPOSE 8000
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]

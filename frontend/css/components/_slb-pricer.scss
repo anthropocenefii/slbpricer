@@ -1,0 +1,872 @@
+// ── SLB Bond Pricer ─────────────────────────────────────────────────────────
+// Colour palette mirrors portfolio_app
+
+$primary:        #024059;
+$primary-dark:   #023c53;
+$primary-darker: #01313f;
+$border:         #3f7e97;
+$border-dim:     rgba(#3f7e97, 0.35);
+$accent:         #f7a918;
+$text:           #ffffff;
+$text-dim:       rgba(#ffffff, 0.7);
+$text-muted:     rgba(#ffffff, 0.45);
+$positive:       #4caf50;
+$negative:       #e53935;
+
+// ── Layout ───────────────────────────────────────────────────────────────────
+
+.slb-pricer {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: $primary-dark;
+  color: $text;
+  font-family: "Source Sans 3", sans-serif;
+
+  &__header {
+    background: $primary;
+    border-bottom: 1px solid $border-dim;
+    padding: 14px 24px;
+
+    h1 {
+      margin: 0 0 3px;
+      font-size: 1.05rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    p {
+      margin: 0;
+      font-size: 0.78rem;
+      color: $text-dim;
+    }
+  }
+
+  &__layout {
+    display: flex;
+    gap: 20px;
+    padding: 20px 24px;
+    align-items: flex-start;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  &__form {
+    width: 370px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  &__results {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+// ── Cards ────────────────────────────────────────────────────────────────────
+
+.slb-card {
+  background: $primary;
+  border: 1px solid $border-dim;
+  border-radius: 6px;
+  padding: 18px;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+
+  &__title {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: $text-dim;
+  }
+}
+
+// ── Mode toggle ──────────────────────────────────────────────────────────────
+
+.slb-mode-toggle {
+  display: flex;
+  border: 1px solid $border-dim;
+  border-radius: 4px;
+  overflow: hidden;
+  font-size: 0.72rem;
+
+  &__btn {
+    padding: 3px 11px;
+    background: transparent;
+    color: $text-muted;
+    border: none;
+    cursor: pointer;
+    transition: all 0.15s;
+
+    & + & {
+      border-left: 1px solid $border-dim;
+    }
+
+    &--active {
+      background: $accent;
+      color: #000;
+      font-weight: 700;
+    }
+
+    &:not(&--active):hover {
+      background: rgba($border, 0.15);
+      color: $text;
+    }
+  }
+}
+
+// ── Form grid ────────────────────────────────────────────────────────────────
+
+.slb-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+// ── Field ────────────────────────────────────────────────────────────────────
+
+.slb-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+
+  &__label {
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: $text-dim;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+
+    &--dim {
+      color: $text-muted;
+    }
+  }
+
+  &__tooltip-wrapper {
+    position: relative;
+    display: inline-flex;
+
+    &:hover .slb-field__tooltip {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
+
+  &__tip-icon {
+    cursor: help;
+    color: $text-muted;
+    font-size: 0.7rem;
+    line-height: 1;
+  }
+
+  &__tooltip {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    width: 210px;
+    background: #011e2b;
+    border: 1px solid $border;
+    border-radius: 4px;
+    padding: 8px 10px;
+    font-size: 0.7rem;
+    color: $text-dim;
+    line-height: 1.5;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s;
+    z-index: 50;
+    text-transform: none;
+    letter-spacing: normal;
+    font-weight: 400;
+
+    &::after {
+      content: "";
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 4px solid transparent;
+      border-top-color: $border;
+    }
+  }
+}
+
+// ── Inputs ───────────────────────────────────────────────────────────────────
+
+.slb-input {
+  background: $primary-dark;
+  border: 1px solid $border-dim;
+  border-radius: 4px;
+  padding: 7px 10px;
+  font-size: 0.85rem;
+  color: $text;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+  font-family: inherit;
+
+  &:focus {
+    border-color: $accent;
+  }
+
+  &--dim {
+    color: $text-muted;
+    background: rgba($primary-darker, 0.7);
+    border-color: rgba($border, 0.2);
+  }
+
+  &[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(0.7);
+    cursor: pointer;
+  }
+}
+
+select.slb-input {
+  cursor: pointer;
+}
+
+// ── Buttons ──────────────────────────────────────────────────────────────────
+
+.slb-btn--primary {
+  width: 100%;
+  padding: 11px 24px;
+  background: $accent;
+  color: #000;
+  border: none;
+  border-radius: 5px;
+  font-size: 0.875rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  font-family: inherit;
+
+  &:hover:not(:disabled) {
+    opacity: 0.88;
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+}
+
+.slb-btn--ghost {
+  width: 100%;
+  padding: 8px 16px;
+  background: transparent;
+  border: 1px dashed $border-dim;
+  color: $text-dim;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+
+  &:hover {
+    border-color: $accent;
+    color: $accent;
+  }
+}
+
+// ── Error / empty ─────────────────────────────────────────────────────────────
+
+.slb-error {
+  border: 1px solid rgba($negative, 0.4);
+  background: rgba($negative, 0.08);
+  border-radius: 5px;
+  padding: 10px 14px;
+  font-size: 0.82rem;
+  color: #ef9a9a;
+}
+
+.slb-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 180px;
+  border: 1px dashed $border-dim;
+  border-radius: 6px;
+  color: $text-muted;
+  font-size: 0.875rem;
+}
+
+// ── Step-up cards ─────────────────────────────────────────────────────────────
+
+.slb-step {
+  background: rgba($primary-darker, 0.6);
+  border: 1px solid $border-dim;
+  border-radius: 5px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  &__title {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: $accent;
+  }
+
+  &__remove {
+    background: transparent;
+    border: none;
+    color: rgba($negative, 0.65);
+    font-size: 0.72rem;
+    cursor: pointer;
+    padding: 2px 6px;
+    font-family: inherit;
+
+    &:hover {
+      color: $negative;
+    }
+  }
+
+  &__type-label {
+    font-size: 0.67rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: $text-dim;
+    margin-bottom: 5px;
+  }
+
+  &__radio-group {
+    display: flex;
+    gap: 14px;
+  }
+
+  &__radio {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.78rem;
+    color: $text-dim;
+    cursor: pointer;
+
+    input[type="radio"] {
+      accent-color: $accent;
+      cursor: pointer;
+    }
+  }
+
+  &__value-badge {
+    color: $accent;
+    font-weight: 700;
+  }
+
+  &__helper {
+    font-size: 0.68rem;
+    color: $text-muted;
+    margin-top: 3px;
+    line-height: 1.4;
+  }
+
+  &__prob-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.65rem;
+    color: $text-muted;
+    margin-top: 3px;
+  }
+
+  &__slider {
+    width: 100%;
+    accent-color: $accent;
+    cursor: pointer;
+  }
+
+  &__empty {
+    font-size: 0.82rem;
+    color: $text-muted;
+    font-style: italic;
+  }
+}
+
+// ── Call option ───────────────────────────────────────────────────────────────
+
+.slb-call__toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+
+  input[type="checkbox"] {
+    width: 15px;
+    height: 15px;
+    accent-color: $accent;
+    cursor: pointer;
+  }
+
+  label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: $text-dim;
+    cursor: pointer;
+  }
+}
+
+// ── Yield curve panel ─────────────────────────────────────────────────────────
+
+.slb-curve {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+
+  &__desc {
+    font-size: 0.72rem;
+    color: $text-muted;
+    margin: -8px 0 0;
+    line-height: 1.4;
+  }
+
+  &__zspread {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba($primary-darker, 0.6);
+    border: 1px solid rgba($border, 0.5);
+    border-radius: 5px;
+    padding: 10px 12px;
+  }
+
+  &__zspread-info {
+    flex: 1;
+  }
+
+  &__zspread-label {
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: $accent;
+    margin-bottom: 2px;
+  }
+
+  &__zspread-hint {
+    font-size: 0.68rem;
+    color: $text-muted;
+  }
+
+  &__zspread-input {
+    width: 76px;
+    text-align: right;
+  }
+
+  &__zspread-unit {
+    font-size: 0.72rem;
+    color: $text-muted;
+    flex-shrink: 0;
+  }
+
+  &__grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 7px 20px;
+  }
+
+  &__row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  &__tenor {
+    font-size: 0.72rem;
+    font-family: monospace;
+    font-weight: 600;
+    color: $text-dim;
+    width: 26px;
+    flex-shrink: 0;
+    text-align: right;
+  }
+
+  &__rate-input {
+    text-align: right;
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__unit {
+    font-size: 0.68rem;
+    color: $text-muted;
+    flex-shrink: 0;
+  }
+}
+
+// ── Results panel ─────────────────────────────────────────────────────────────
+
+.slb-results {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+// Price summary cards
+
+.slb-price-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+
+.slb-price-card {
+  background: $primary;
+  border: 1px solid $border-dim;
+  border-radius: 6px;
+  padding: 14px;
+
+  &--accent {
+    background: rgba($accent, 0.08);
+    border-color: rgba($accent, 0.35);
+  }
+
+  &--positive {
+    background: rgba($positive, 0.07);
+    border-color: rgba($positive, 0.3);
+  }
+
+  &--negative {
+    background: rgba($negative, 0.07);
+    border-color: rgba($negative, 0.3);
+  }
+
+  &__label {
+    font-size: 0.67rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: $text-dim;
+    margin-bottom: 6px;
+
+    .slb-price-card--accent & { color: $accent; }
+    .slb-price-card--positive & { color: $positive; }
+    .slb-price-card--negative & { color: rgba($negative, 0.85); }
+  }
+
+  &__value {
+    font-size: 1.45rem;
+    font-weight: 700;
+    color: $text;
+
+    .slb-price-card--accent & { color: $accent; }
+    .slb-price-card--positive & { color: $positive; }
+    .slb-price-card--negative & { color: rgba($negative, 0.9); }
+  }
+
+  &__sub {
+    font-size: 0.7rem;
+    color: $text-muted;
+    margin-top: 4px;
+
+    .slb-price-card--accent & { color: rgba($accent, 0.65); }
+    .slb-price-card--positive & { color: rgba($positive, 0.65); }
+    .slb-price-card--negative & { color: rgba($negative, 0.55); }
+  }
+}
+
+// Z-spread comparison
+
+.slb-zspread-box {
+  background: rgba(#1a5244, 0.35);
+  border: 1px solid rgba($positive, 0.28);
+  border-radius: 6px;
+  padding: 14px;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 14px;
+
+  &__label {
+    font-size: 0.67rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: rgba($positive, 0.75);
+    margin-bottom: 4px;
+  }
+
+  &__value {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: $positive;
+
+    &--mixed {
+      color: $text;
+    }
+  }
+
+  &__sub {
+    font-size: 0.68rem;
+    color: rgba($positive, 0.55);
+    margin-top: 3px;
+  }
+}
+
+// Accrued interest
+
+.slb-accrued {
+  background: $primary;
+  border: 1px solid $border-dim;
+  border-radius: 5px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.85rem;
+
+  &__label { color: $text-dim; }
+
+  &__value {
+    font-weight: 600;
+    font-family: monospace;
+    color: $text;
+  }
+}
+
+// Call option result
+
+.slb-call-result {
+  background: rgba($accent, 0.07);
+  border: 1px solid rgba($accent, 0.28);
+  border-radius: 5px;
+  padding: 12px 14px;
+
+  &__title {
+    font-size: 0.67rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: $accent;
+    margin-bottom: 8px;
+  }
+
+  &__row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    color: $text-dim;
+
+    & + & { margin-top: 4px; }
+  }
+
+  &__value {
+    font-weight: 600;
+    font-family: monospace;
+    color: $text;
+  }
+}
+
+// Scenarios table
+
+.slb-scenarios {
+  background: $primary;
+  border: 1px solid $border-dim;
+  border-radius: 6px;
+  overflow: hidden;
+
+  &__header {
+    padding: 10px 14px;
+    border-bottom: 1px solid $border-dim;
+  }
+
+  &__title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: $text;
+    margin: 0 0 2px;
+  }
+
+  &__sub {
+    font-size: 0.7rem;
+    color: $text-muted;
+  }
+
+  &__wrap {
+    overflow-x: auto;
+  }
+
+  &__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.78rem;
+
+    thead {
+      background: rgba($primary-darker, 0.55);
+
+      th {
+        padding: 7px 11px;
+        font-size: 0.65rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: $text-muted;
+        text-align: right;
+        white-space: nowrap;
+
+        &:first-child { text-align: left; }
+      }
+    }
+
+    tbody {
+      tr {
+        border-top: 1px solid rgba($border, 0.13);
+
+        &:hover { background: rgba($border, 0.05); }
+      }
+
+      td {
+        padding: 7px 11px;
+        text-align: right;
+        font-family: monospace;
+        color: $text-dim;
+
+        &:first-child {
+          text-align: left;
+          font-family: inherit;
+          max-width: 210px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          color: $text;
+        }
+      }
+    }
+  }
+
+  &__cell--accent {
+    color: $accent !important;
+    font-weight: 600;
+  }
+
+  &__cell--pos {
+    color: $positive !important;
+    font-weight: 600;
+  }
+
+  &__cell--neg {
+    color: rgba($negative, 0.9) !important;
+    font-weight: 600;
+  }
+}
+
+// Chart
+
+.slb-chart {
+  background: $primary;
+  border: 1px solid $border-dim;
+  border-radius: 6px;
+  padding: 14px;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+
+  &__title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: $text;
+  }
+
+  &__badge {
+    font-size: 0.68rem;
+    color: $accent;
+    border: 1px solid rgba($accent, 0.3);
+    border-radius: 3px;
+    padding: 2px 7px;
+  }
+}
+
+// Cash flow table
+
+.slb-cftable {
+  background: $primary;
+  border: 1px solid $border-dim;
+  border-radius: 6px;
+  overflow: hidden;
+
+  &__header {
+    padding: 10px 14px;
+    border-bottom: 1px solid $border-dim;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: $text;
+  }
+
+  &__scroll {
+    overflow-x: auto;
+    max-height: 260px;
+    overflow-y: auto;
+  }
+
+  &__table {
+    width: 100%;
+    font-size: 0.7rem;
+    font-family: monospace;
+    border-collapse: collapse;
+
+    thead {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: rgba($primary-darker, 0.95);
+
+      th {
+        padding: 6px 9px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: $text-muted;
+        text-align: right;
+        white-space: nowrap;
+
+        &:first-child { text-align: left; }
+      }
+    }
+
+    tbody {
+      tr {
+        border-top: 1px solid rgba($border, 0.1);
+
+        &:hover { background: rgba($border, 0.05); }
+      }
+
+      td {
+        padding: 4px 9px;
+        text-align: right;
+        color: $text-dim;
+
+        &:first-child {
+          text-align: left;
+          color: $text;
+        }
+      }
+    }
+  }
+
+  &__cell--accent { color: $accent !important; font-weight: 600; }
+  &__cell--pos    { color: $positive !important; }
+  &__cell--neg    { color: rgba($negative, 0.8) !important; }
+  &__cell--orange { color: #fb923c !important; font-weight: 600; }
+  &__cell--green  { color: rgba($positive, 0.85) !important; }
+}

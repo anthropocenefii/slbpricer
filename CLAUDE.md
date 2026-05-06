@@ -4,20 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**slbpricer** is a full-stack bond pricing web application. It prices fixed-coupon bonds with optional step-up/step-down coupons and embedded call options. The core output is:
-- Base bond price (plain fixed coupon)
-- Price under each step-up/step-down scenario
-- Probability-weighted price (expected value across scenarios)
-- Present value of the step-up/step-down cash flows
+**slbpricer** is a full-stack bond pricing web application structured as a Django applet, matching the conventions of the parent `portfolio_app`. It prices fixed-coupon bonds with optional step-up/step-down coupons and embedded call options.
 
 ## Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | React 18 + TypeScript + Vite |
-| Backend | Python 3.11+ + FastAPI |
-| Pricing math | NumPy, SciPy |
-| Styling | Tailwind CSS |
+| Frontend | React 19 + JavaScript + Vite |
+| State | Zustand |
+| Backend | Python 3.10+ + Django 5 |
+| Pricing math | NumPy, SciPy, Pydantic |
+| Styling | SCSS (global BEM, portfolio_app colour scheme) |
 | HTTP client | Axios |
 | Charts | Recharts |
 
@@ -25,129 +22,116 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```
 slbpricer/
-├── backend/
-│   ├── main.py                  # FastAPI app, CORS, route registration
-│   ├── models/
-│   │   └── bond.py              # Pydantic request/response models
+├── manage.py
+├── requirements.txt
+├── slbpricer_project/           # Django project settings
+│   ├── settings.py
+│   ├── urls.py
+│   └── wsgi.py
+├── pricer/                      # Django app
+│   ├── views.py                 # index + /api/price + /api/health
+│   ├── urls.py
+│   ├── bond_models.py           # Pydantic request/response models
 │   ├── pricing/
-│   │   ├── cashflows.py         # Cash flow schedule generation
-│   │   ├── day_count.py         # Day count conventions (Act/Act, Act/360, 30/360, Act/365)
 │   │   ├── bond_price.py        # Core discounting and PV calculation
-│   │   └── call_option.py       # Embedded call option (callable bond) logic
-│   ├── requirements.txt
-│   └── tests/
-│       └── test_pricing.py
+│   │   ├── cashflows.py         # Cash flow schedule generation
+│   │   ├── day_count.py         # Day count conventions
+│   │   └── yield_curve.py       # Curve interpolation and z-spread solving
+│   └── templates/pricer/
+│       └── index.html           # Django template mounting React app
+├── static/                      # Vite build output (gitignored)
 ├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── BondInputForm.tsx      # Settlement, maturity, coupon, face value, day count, yield
-│   │   │   ├── StepUpConfigurator.tsx # Add/remove step-up or step-down periods with probability sliders
-│   │   │   ├── CallOptionPanel.tsx    # Call date + call price inputs
-│   │   │   └── ResultsPanel.tsx       # Base price, scenario prices, PV of step-up table + chart
-│   │   ├── api/
-│   │   │   └── pricer.ts             # Typed Axios calls to /api/price
-│   │   ├── types/
-│   │   │   └── bond.ts               # Shared TypeScript types mirroring Pydantic models
-│   │   ├── App.tsx
-│   │   └── main.tsx
-│   ├── package.json
-│   ├── vite.config.ts
-│   └── tsconfig.json
-└── CLAUDE.md
+│   ├── vite.config.mjs          # Multi-entry Vite config (mirrors portfolio_app)
+│   ├── package.json             # JS only — zustand, sass, react 19, recharts
+│   ├── applets/slb_pricer/src/
+│   │   ├── main.jsx             # createRoot → #slb-pricer-app, exposes window.initialiseSLBPricer
+│   │   ├── App.jsx              # Layout, form submission, reads from Zustand
+│   │   ├── api/pricer.js        # axios.post('/api/price', req)
+│   │   ├── store/useBondStore.js # All state + actions (Zustand)
+│   │   └── components/
+│   │       ├── BondInputForm.jsx
+│   │       ├── StepUpConfigurator.jsx
+│   │       ├── CallOptionPanel.jsx
+│   │       ├── YieldCurvePanel.jsx
+│   │       └── ResultsPanel.jsx
+│   └── css/
+│       ├── main.scss            # @use "components"
+│       ├── styles.js            # Vite entry for SCSS bundle
+│       └── components/
+│           ├── _index.scss
+│           └── _slb-pricer.scss # All BEM styles for the applet
+└── backend/                     # LEGACY FastAPI — superseded by pricer/ Django app
 ```
 
 ## Commands
 
-### Backend
+### Backend (Django)
 
 ```bash
 # Install dependencies
-cd backend && pip install -r requirements.txt
+pip install -r requirements.txt
 
-# Run dev server (reload on change)
-uvicorn main:app --reload --port 8000
+# Run dev server
+python manage.py runserver 8000
 
-# Run tests
-pytest tests/
-
-# Run a single test
-pytest tests/test_pricing.py::test_plain_bond_price -v
+# System check
+python manage.py check
 ```
 
 ### Frontend
 
 ```bash
-# Install dependencies
-cd frontend && npm install
+cd frontend
 
-# Run dev server (proxies /api to localhost:8000)
+# Install dependencies
+npm install
+
+# Run Vite dev server (proxies /api → Django :8000)
 npm run dev
 
-# Build for production
+# Production build (outputs to ../static/)
 npm run build
-
-# Type-check without emitting
-npm run typecheck
-
-# Lint
-npm run lint
 ```
 
-## Pricing Domain Model
+### Development workflow
 
-### Inputs
+Run both servers simultaneously:
+- Django: `python manage.py runserver 8000`
+- Vite: `cd frontend && npm run dev`
 
-| Field | Notes |
-|-------|-------|
-| `settlement_date` | Date pricing is effective from |
-| `maturity_date` | Final redemption date |
-| `face_value` | Par / notional (e.g. 100) |
-| `coupon_rate` | Annual coupon as decimal (e.g. 0.05 = 5%) |
-| `coupon_frequency` | Payments per year: 1 (annual), 2 (semi-annual), 4 (quarterly) |
-| `day_count` | `"ACT/ACT"`, `"ACT/360"`, `"ACT/365"`, `"30/360"` |
-| `yield_rate` | Flat discount yield as decimal |
-| `step_ups` | List of step-up/step-down periods (see below) |
-| `call_option` | Optional call date + call price |
+Navigate to `http://localhost:8000` (Django serves the page). Vite dev server on :5173 handles HMR and proxies `/api/` to Django. When `frontend/vite-dev.json` exists, Django's `views._get_vite_assets()` switches to dev mode and loads assets from :5173.
 
-### Step-up/Step-down Structure
+## Styling conventions (match portfolio_app)
 
-Each entry in `step_ups` has:
-- `start_date` — first coupon date the new rate applies
-- `end_date` — last coupon date the new rate applies (often maturity)
-- `coupon_delta` — change in coupon rate (positive = step-up, negative = step-down)
-- `probability` — float 0–1, default 0.5; probability this scenario occurs
+- Colour palette: `#024059` primary, `#f7a918` accent, `#3f7e97` border
+- BEM naming: `.slb-pricer__header`, `.slb-card--active`
+- No CSS Modules — all styles global in `_slb-pricer.scss`
+- Font: Source Sans 3
 
-Multiple non-overlapping or overlapping step periods are supported. The pricing engine computes an expected cash flow per period as:
+## Vite aliases
 
-```
-CF_expected(t) = CF_base(t) + sum_over_scenarios[ delta_CF(t, s) * P(s) ]
-```
-
-### Call Option
-
-The embedded call is priced using the yield-to-call method: compute the price assuming the bond is called at `call_price` on `call_date`, then report both yield-to-maturity price and yield-to-call price. The callable bond price is `min(price_to_maturity, price_to_call)` from the issuer's perspective.
-
-### Key Calculation Flow
-
-1. `cashflows.py` generates the coupon schedule (date, base coupon, effective coupon per scenario)
-2. `day_count.py` computes year fractions between dates
-3. `bond_price.py` discounts each cash flow: `PV = CF / (1 + y/freq)^(freq * t)`
-4. Results include base price, per-scenario price, expected price, and the PV difference (value of step-up)
+| Alias | Path |
+|-------|------|
+| `@slb` | `applets/slb_pricer/src` |
+| `@slb_components` | `applets/slb_pricer/src/components` |
+| `@slb_store` | `applets/slb_pricer/src/store` |
+| `@scss` | `css` |
 
 ## API
 
 ### `POST /api/price`
 
-Request body: `BondPriceRequest` (Pydantic model)
+Request body: `BondPriceRequest` (Pydantic model in `pricer/bond_models.py`)
 Response: `BondPriceResponse` with fields:
-- `base_price` — price ignoring step-ups
-- `scenario_prices` — list of `{label, price, pv_of_stepup, probability}`
-- `expected_price` — probability-weighted price
-- `cashflow_schedule` — list of dated cash flows for the chart
+- `base_price`, `base_clean_price` — price ignoring step-ups
+- `expected_price`, `expected_clean_price` — probability-weighted price
+- `scenario_results` — per-scenario breakdown
+- `cashflow_schedule` — dated cash flows for the chart
+- `accrued_interest`, `price_to_call`, `step_up_yield_bps`, `step_up_spread_bps`
 
 ## Development Notes
 
-- The Vite dev server proxies `/api/*` to `http://localhost:8000` — no CORS issues locally.
-- All dates are transmitted as ISO 8601 strings (`YYYY-MM-DD`).
-- Coupon rates and yields are always decimals server-side (not percentages); the frontend handles display conversion.
-- Step-up probabilities are independent — the engine does not enforce that they sum to 1; it computes an expected value using each probability independently.
+- All dates transmitted as ISO 8601 strings (`YYYY-MM-DD`).
+- Coupon rates and yields are always decimals server-side; the frontend divides/multiplies by 100 for display.
+- Step-up probabilities are independent — the engine computes an expected value using each probability independently.
+- The `backend/` folder contains the superseded FastAPI implementation and can be deleted.
