@@ -1,5 +1,9 @@
+import os
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from .models.bond import BondPriceRequest, BondPriceResponse
 from .pricing.bond_price import price_bond
@@ -30,3 +34,14 @@ def price(req: BondPriceRequest) -> BondPriceResponse:
 @app.get("/api/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+# Serve the React SPA in production (static/ dir is populated by the Docker build).
+# The catch-all must come last so API routes take priority.
+_static = os.path.join(os.path.dirname(__file__), "..", "static")
+if os.path.isdir(_static):
+    app.mount("/assets", StaticFiles(directory=os.path.join(_static, "assets")), name="assets")
+
+    @app.get("/{full_path:path}")
+    def spa_fallback(full_path: str) -> FileResponse:
+        return FileResponse(os.path.join(_static, "index.html"))

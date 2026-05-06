@@ -181,7 +181,7 @@ def price_bond(req: BondPriceRequest) -> dict:
         yield_value_bps = None
         if not use_curve:
             try:
-                y_base = _solve_yield_flat(sp_certain, req.settlement_date, schedule, freq, dc)
+                y_base = _solve_yield_flat(sp_weighted, req.settlement_date, schedule, freq, dc)
                 yield_value_bps = round((req.yield_rate - y_base) * 10000, 2)
             except Exception:
                 pass
