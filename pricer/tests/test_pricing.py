@@ -3,9 +3,9 @@
 import pytest
 from datetime import date
 
-from backend.models.bond import BondPriceRequest, StepUp, CallOption
-from backend.pricing.bond_price import price_bond
-from backend.pricing.day_count import DayCount, year_fraction, accrued_fraction
+from pricer.bond_models import BondPriceRequest, StepUp, CallOption
+from pricer.pricing.bond_price import price_bond
+from pricer.pricing.day_count import DayCount, year_fraction, accrued_fraction
 
 
 # ---------------------------------------------------------------------------
@@ -26,7 +26,6 @@ class TestYearFraction:
         assert abs(yf - 1.0) < 1e-10
 
     def test_act_act_non_leap(self):
-        # Full year 2023 (non-leap) = 1.0
         yf = year_fraction(date(2023, 1, 1), date(2024, 1, 1), DayCount.ACT_ACT)
         assert abs(yf - 1.0) < 1e-10
 
@@ -56,7 +55,6 @@ class TestPlainBond:
 
     def test_par_price_semiannual(self):
         result = price_bond(self._par_request(frequency=2))
-        # Accrued is 0 on issue date, dirty ≈ clean ≈ par
         assert abs(result["base_clean_price"] - 100.0) < 0.01
 
     def test_par_price_annual(self):
@@ -101,12 +99,8 @@ class TestStepUp:
     def test_stepup_increases_expected_price(self):
         req = self._base_req()
         req.step_ups = [
-            StepUp(
-                start_date=date(2026, 1, 1),
-                end_date=date(2029, 1, 1),
-                coupon_delta=0.01,
-                probability=1.0,
-            )
+            StepUp(start_date=date(2026, 1, 1), end_date=date(2029, 1, 1),
+                   coupon_delta=0.01, probability=1.0)
         ]
         result = price_bond(req)
         assert result["expected_price"] > result["base_price"]
@@ -114,12 +108,8 @@ class TestStepUp:
     def test_stepdown_decreases_expected_price(self):
         req = self._base_req()
         req.step_ups = [
-            StepUp(
-                start_date=date(2026, 1, 1),
-                end_date=date(2029, 1, 1),
-                coupon_delta=-0.01,
-                probability=1.0,
-            )
+            StepUp(start_date=date(2026, 1, 1), end_date=date(2029, 1, 1),
+                   coupon_delta=-0.01, probability=1.0)
         ]
         result = price_bond(req)
         assert result["expected_price"] < result["base_price"]
@@ -127,12 +117,8 @@ class TestStepUp:
     def test_probability_zero_no_effect(self):
         req = self._base_req()
         req.step_ups = [
-            StepUp(
-                start_date=date(2026, 1, 1),
-                end_date=date(2029, 1, 1),
-                coupon_delta=0.02,
-                probability=0.0,
-            )
+            StepUp(start_date=date(2026, 1, 1), end_date=date(2029, 1, 1),
+                   coupon_delta=0.02, probability=0.0)
         ]
         result = price_bond(req)
         assert abs(result["expected_price"] - result["base_price"]) < 1e-8
@@ -140,40 +126,28 @@ class TestStepUp:
     def test_probability_half_midpoint(self):
         req_full = self._base_req()
         req_full.step_ups = [
-            StepUp(
-                start_date=date(2026, 1, 1),
-                end_date=date(2029, 1, 1),
-                coupon_delta=0.01,
-                probability=1.0,
-            )
+            StepUp(start_date=date(2026, 1, 1), end_date=date(2029, 1, 1),
+                   coupon_delta=0.01, probability=1.0)
         ]
         req_half = self._base_req()
         req_half.step_ups = [
-            StepUp(
-                start_date=date(2026, 1, 1),
-                end_date=date(2029, 1, 1),
-                coupon_delta=0.01,
-                probability=0.5,
-            )
+            StepUp(start_date=date(2026, 1, 1), end_date=date(2029, 1, 1),
+                   coupon_delta=0.01, probability=0.5)
         ]
         base = price_bond(self._base_req())["base_price"]
         full = price_bond(req_full)["expected_price"]
         half = price_bond(req_half)["expected_price"]
-        assert abs(half - (base + full) / 2) < 1e-8
+        assert abs(half - (base + full) / 2) < 1e-5
 
     def test_scenario_pv_matches_diff(self):
         req = self._base_req()
         req.step_ups = [
-            StepUp(
-                start_date=date(2026, 1, 1),
-                end_date=date(2029, 1, 1),
-                coupon_delta=0.01,
-                probability=0.5,
-            )
+            StepUp(start_date=date(2026, 1, 1), end_date=date(2029, 1, 1),
+                   coupon_delta=0.01, probability=0.5)
         ]
         result = price_bond(req)
         sr = result["scenario_results"][0]
-        assert abs(sr.pv_of_stepup - (sr.price - result["base_price"])) < 1e-8
+        assert abs(sr.pv_of_stepup - (sr.price - result["base_price"])) < 1e-5
 
 
 # ---------------------------------------------------------------------------

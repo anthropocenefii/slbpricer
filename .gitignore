@@ -6,15 +6,23 @@ __pycache__/
 .Python
 slb_venv/
 venv/
+venv_slb/
 .venv/
 *.egg-info/
 dist/
 build/
 .pytest_cache/
+db.sqlite3
+
+# Django / Vite build output
+static/
+staticfiles/
+
+# Vite dev server state
+frontend/vite-dev.json
 
 # Node
 node_modules/
-dist/
 frontend/dist/
 
 # Env / secrets
@@ -25,6 +33,7 @@ frontend/dist/
 # OS
 .DS_Store
 Thumbs.db
+restart.txt
 
 # IDE
 .vscode/
