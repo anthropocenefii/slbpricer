@@ -12,6 +12,19 @@ from .bond_models import BondPriceRequest, BondPriceResponse
 from .pricing.bond_price import price_bond
 
 
+def _collect_css(manifest, chunk_key, visited=None):
+    if visited is None:
+        visited = set()
+    if chunk_key in visited:
+        return []
+    visited.add(chunk_key)
+    chunk = manifest.get(chunk_key, {})
+    css = list(chunk.get('css', []))
+    for imp in chunk.get('imports', []):
+        css.extend(_collect_css(manifest, imp, visited))
+    return css
+
+
 def _get_vite_assets():
     vite_dev_path = settings.BASE_DIR / 'frontend' / 'vite-dev.json'
     if settings.DEBUG and vite_dev_path.exists():
@@ -22,7 +35,7 @@ def _get_vite_assets():
             'css': [],
         }
 
-    manifest_path = settings.BASE_DIR / 'static' / 'manifest.json'
+    manifest_path = settings.BASE_DIR / 'static' / '.vite' / 'manifest.json'
     try:
         with open(manifest_path) as f:
             manifest = json.load(f)
@@ -35,7 +48,7 @@ def _get_vite_assets():
         'dev': False,
         'client': None,
         'entry_js': f"/static/{entry.get('file', '')}",
-        'css': [f"/static/{c}" for c in entry.get('css', [])],
+        'css': [f"/static/{c}" for c in _collect_css(manifest, entry_key)],
     }
 
 
